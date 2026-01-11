@@ -36,7 +36,7 @@ The application is deployed as a static frontend and supports client-side routin
 
 An example external currency rates file:
 ```
-https://<username>.github.io/<repo-name>/rates.json
+https://shaharaviram1.github.io/CostManager/rates.json
 ```
 
 ---
