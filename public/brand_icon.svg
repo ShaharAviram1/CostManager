@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Axes -->
+  <path
+    d="M4 4v16h16"
+    fill="none"
+    stroke="#000"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Bars -->
+  <rect x="7" y="13" width="3" height="5" rx="0.6" fill="#000" />
+  <rect x="12" y="10" width="3" height="8" rx="0.6" fill="#000" />
+  <rect x="17" y="7" width="3" height="11" rx="0.6" fill="#000" />
+</svg>
