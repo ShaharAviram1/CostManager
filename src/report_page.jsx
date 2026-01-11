@@ -112,7 +112,7 @@ export default function ReportPage({ db }) {
             </Typography>
 
             <Typography sx={{ mt: 1 }}>
-              Total: {report.total.total} {report.total.currency}
+              Total: {Number(report.total.total).toLocaleString(undefined, { maximumFractionDigits: 2 })} {report.total.currency}
             </Typography>
 
             <Typography sx={{ mb: 1 }}>
