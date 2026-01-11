@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>idb test</title>
+</head>
+<body>
+  <script src="idb.js"></script>
+  <script>
+    async function test() {
+      const db = await idb.openCostsDB("costsdb", 1);
+
+      const result1 = await db.addCost({
+        sum: 200,
+        currency: "USD",
+        category: "FOOD",
+        description: "pizza",
+      });
+
+      const result2 = await db.addCost({
+        sum: 400,
+        currency: "USD",
+        category: "CAR",
+        description: "fuel",
+      });
+
+      console.log("db ok:", !!db);
+      console.log("added 1:", result1);
+      console.log("added 2:", result2);
+      idb.setRates({ USD: 1, GBP: 0.5, EURO: 0.7, ILS: 3.4 });
+      const rep = await db.getReport(new Date().getFullYear(), new Date().getMonth() + 1, "ILS");
+      console.log("report:", rep);
+    }
+
+    test();
+  </script>
+</body>
+</html>
