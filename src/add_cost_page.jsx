@@ -14,7 +14,7 @@ import {
 import ContentCard from './components/content_card';
 
 export default function AddCostPage({ db }) {
-    // Controlled form state
+    // Controlled form state tracking category, currency, sum, description, and status message
     const [category, setCategory] = useState('');
     const [currency, setCurrency] = useState('');
     const [sum, setSum] = useState('');
@@ -45,8 +45,10 @@ export default function AddCostPage({ db }) {
     return (
         <ContentCard>
             <Stack spacing={2}>
+                {/* Page header */}
                 <Typography variant='h5'>Add Cost</Typography>
 
+                {/* Category selector */}
                 <FormControl fullWidth>
                     <InputLabel id='category-label'>Category</InputLabel>
                     <Select
@@ -62,6 +64,7 @@ export default function AddCostPage({ db }) {
                     </Select>
                 </FormControl>
 
+                {/* Currency selector */}
                 <FormControl fullWidth>
                     <InputLabel id='currency-label'>Currency</InputLabel>
                     <Select
@@ -76,6 +79,7 @@ export default function AddCostPage({ db }) {
                     </Select>
                 </FormControl>
 
+                {/* Sum input */}
                 <TextField
                     label='Sum'
                     type='text'
@@ -90,16 +94,19 @@ export default function AddCostPage({ db }) {
                     }}
                     fullWidth/>
 
+                {/* Description input */}
                 <TextField
                     label='Description'
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     fullWidth/>
 
+                {/* Submit button */}
                 <Button variant='contained' onClick={handleSubmit} disabled={!canSubmit}>
                     Submit
                 </Button>
 
+                {/* Status/feedback message */}
                 {status && (
                     <Alert severity={status.startsWith('Save failed') ? 'error' : 'info'}>
                         {status}

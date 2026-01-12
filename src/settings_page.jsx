@@ -12,6 +12,7 @@ import {
 import ContentCard from './components/content_card';
 
 export default function SettingsPage({ db }) {
+    // State tracked: URL input, status message, and loading state
     // Persisted URL for fetching exchange rates (advanced usage)
     const [url, setUrl] = useState(() => {
         const saved = localStorage.getItem('ratesUrl');
@@ -37,7 +38,20 @@ export default function SettingsPage({ db }) {
                 return;
             }
             const rates = await res.json();
-            db.setRates(rates);
+
+            // Validate rates object structure and required numeric entries
+            if (
+                typeof rates !== 'object' || rates === null ||
+                typeof rates.USD !== 'number' ||
+                typeof rates.ILS !== 'number' ||
+                typeof rates.GBP !== 'number' ||
+                typeof rates.EURO !== 'number'
+            ) {
+                setStatus('Invalid rates format');
+                return;
+            }
+
+            await db.setRates(rates);
             localStorage.setItem('ratesUrl', finalUrl);
             setUrl(finalUrl);
             setStatus('Rates loaded');
@@ -54,6 +68,7 @@ export default function SettingsPage({ db }) {
     return (
         <ContentCard>
             <Stack spacing={2}>
+                {/* Header section */}
                 <Stack spacing={0.5}>
                     <Typography variant='h5'>Settings</Typography>
                     <Typography variant='body2' color='text.secondary'>

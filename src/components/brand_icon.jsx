@@ -1,8 +1,11 @@
+// This component represents the application brand icon used throughout the app, including the AppBar and favicon.
+
 // Brand icon used in the AppBar and favicon (simple chart metaphor).
 function BrandIcon(props) {
   // Allow caller to control icon size; fallback matches AppBar height
   const size = props.size || 22;
 
+  // Component rendering an SVG icon symbolizing financial data via a simple chart
   return (
     // Inline SVG so it inherits theme color cleanly
     <svg
@@ -13,6 +16,7 @@ function BrandIcon(props) {
       aria-hidden="true"
       focusable="false"
     >
+      {/* Visual metaphor: a minimalist bar chart representing financial growth */}
       {/* Chart axes */}
       <path
         d="M4 4v16h16"

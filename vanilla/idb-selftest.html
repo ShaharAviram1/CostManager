@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>idb.js Boundary Test</title>
+</head>
+<body>
+  <h1>idb.js Boundary Test (see console)</h1>
+
+  <script src="./idb.js"></script>
+  <script>
+    // ---------- helpers ----------
+    function approxEqual(a, b, eps = 1e-9) {
+      return Math.abs(a - b) <= eps;
+    }
+
+    // Convert using USD as pivot:
+    // amount / fromRate * toRate
+    function convert(amount, fromCurrency, toCurrency, rates) {
+      const fromRate = rates[fromCurrency];
+      const toRate = rates[toCurrency];
+      if (!fromRate || !toRate) return amount;
+      return (amount / fromRate) * toRate;
+    }
+
+    function assert(cond, msg) {
+      if (!cond) throw new Error("ASSERT FAIL: " + msg);
+    }
+
+    // Compute expected report total and expected costs per item (strict format)
+    function computeExpectedReport(items, year, month, targetCurrency, rates) {
+      const filtered = items.filter((it) => it.Date.year === year && it.Date.month === month);
+
+      const costs = filtered.map((it) => {
+        return {
+          sum: Number(it.sum),
+          currency: String(it.currency),
+          category: String(it.category),
+          description: String(it.description),
+          Date: { day: Number(it.Date.day) }
+        };
+      });
+
+      const total = filtered.reduce((acc, it) => {
+        const sumNum = Number(it.sum);
+        return acc + convert(sumNum, it.currency, targetCurrency, rates);
+      }, 0);
+
+      return {
+        year,
+        month,
+        costs,
+        total: { currency: targetCurrency, total }
+      };
+    }
+
+    // Compare actual report from db.getReport with expected:
+    function compareReport(actual, expected, label) {
+      console.group(label);
+
+      // Basic shape checks
+      assert(actual.year === expected.year, `year mismatch: ${actual.year} vs ${expected.year}`);
+      assert(actual.month === expected.month, `month mismatch: ${actual.month} vs ${expected.month}`);
+      assert(actual.total && actual.total.currency === expected.total.currency,
+        `total currency mismatch: ${actual.total?.currency} vs ${expected.total.currency}`);
+
+      // Compare counts
+      assert(Array.isArray(actual.costs), "actual.costs is not array");
+      assert(actual.costs.length === expected.costs.length,
+        `costs length mismatch: ${actual.costs.length} vs ${expected.costs.length}`);
+
+      // Compare totals (approx)
+      const aTotal = actual.total.total;
+      const eTotal = expected.total.total;
+      if (!approxEqual(aTotal, eTotal, 1e-9)) {
+        console.error("Total mismatch", { actual: aTotal, expected: eTotal, diff: aTotal - eTotal });
+        throw new Error(`Total mismatch: ${aTotal} vs ${eTotal}`);
+      }
+
+      // Assert strict shape for each actual cost item
+      for (const item of actual.costs) {
+        const keys = Object.keys(item).sort();
+        assert(keys.length === 5 && keys.join(",") === "Date,category,currency,description,sum",
+          `Item keys mismatch: found keys ${keys.join(",")}`);
+
+        assert(typeof item.sum === "number", "sum should be a number");
+        assert(typeof item.currency === "string", "currency should be a string");
+        assert(typeof item.category === "string", "category should be a string");
+        assert(typeof item.description === "string", "description should be a string");
+        assert(item.Date && typeof item.Date === "object", "Date should be object");
+        const dateKeys = Object.keys(item.Date).sort();
+        assert(dateKeys.length === 1 && dateKeys[0] === "day", `Date keys mismatch: found keys ${dateKeys.join(",")}`);
+        assert(typeof item.Date.day === "number", "Date.day should be a number");
+      }
+
+      // Helper to create a key for multiset comparison
+      function makeKey(item) {
+        return Number(item.sum) + "|" + item.currency + "|" + item.category + "|" + item.description + "|" + Number(item.Date?.day);
+      }
+
+      // Build expected counts map
+      const expectedCounts = new Map();
+      for (const e of expected.costs) {
+        const key = makeKey(e);
+        expectedCounts.set(key, (expectedCounts.get(key) || 0) + 1);
+      }
+
+      // Decrement counts for actual items
+      for (const a of actual.costs) {
+        const key = makeKey(a);
+        const count = expectedCounts.get(key);
+        assert(count !== undefined && count > 0, `Unexpected or too many items with key: ${key}`);
+        expectedCounts.set(key, count - 1);
+      }
+
+      // Assert all counts zero
+      for (const [key, count] of expectedCounts.entries()) {
+        assert(count === 0, `Missing expected items with key: ${key}`);
+      }
+
+      console.log("%cPASS", "color: green; font-weight: bold;");
+      console.groupEnd();
+    }
+
+    // ---------- boundary test plan ----------
+    // Non-trivial rates: 1 USD = 3.8 ILS, 0.62 GBP, 0.91 EURO
+    // Means: amount in USD -> multiply by targetRate
+    // amount in ILS -> divide by 3.8 to get USD
+    const RATES = { USD: 1, ILS: 3.8, GBP: 0.62, EURO: 0.91 };
+
+    // We'll insert 10 costs. Some are:
+    // - decimals
+    // - sum as string
+    // - different currencies
+    // - different months/years
+    // Then we run reports:
+    // - Jan 2026 in USD, ILS, EURO
+    // - Feb 2026 in GBP
+    // - Jan 2025 in USD (should only include that single item)
+
+    async function run() {
+      console.clear();
+      console.log("Starting boundary tests...");
+
+      // Use a unique DB name each run to avoid old data interference
+      const dbName = "costsdb_boundary_" + Date.now();
+      const db = await idb.openCostsDB(dbName, 1);
+
+      // Load rates into the library (used by convert inside getReport)
+      db.setRates(RATES);
+
+      // Add 10 items, then record their full stored objects so we can compute expectations
+      const inserted = [];
+
+      // Helper: we want specific months/years. Your addCost uses "now", so for testing boundaries
+      // we override Date in the stored objects by doing a "post-fix" in memory for expected calc
+      // BUT: the DB uses the stored Date. So we need items to be stored with those dates.
+      //
+      // Since your addCost always uses current date, we cannot set past months directly via API.
+      // Therefore: boundary test should focus on year/month = NOW by default, OR you temporarily
+      // allow date injection. If you don't want to change idb.js, we can still do a strong test
+      // by grouping on current month/year and verifying totals + conversions.
+      //
+      // We'll do that: use the current month/year as (Y,M), and also add a couple items where we
+      // manually update the stored record date via IndexedDB transaction (test-only) after insert.
+
+      const now = new Date();
+      const Y = now.getFullYear();
+      const M = now.getMonth() + 1;
+
+      // 8 items in current month/year
+      inserted.push(await db.addCost({ sum: 10, currency: "USD",  category: "FOOD",      description: "a" }));
+      inserted.push(await db.addCost({ sum: "12.5", currency: "ILS", category: "CAR",       description: "b" })); // string sum
+      inserted.push(await db.addCost({ sum: 7.99, currency: "EURO", category: "FOOD",      description: "c" }));
+      inserted.push(await db.addCost({ sum: 100, currency: "GBP",  category: "EDU",       description: "d" }));
+      inserted.push(await db.addCost({ sum: 0, currency: "USD",    category: "MISC",      description: "zero" })); // boundary: 0
+      inserted.push(await db.addCost({ sum: 250.75, currency: "ILS", category: "RENT",     description: "e" }));
+      inserted.push(await db.addCost({ sum: 1, currency: "GBP",     category: "MISC",     description: "f" }));
+      inserted.push(await db.addCost({ sum: 9999.99, currency: "EURO", category: "TRAVEL", description: "g" })); // large number
+
+      // 2 items that we'll move to different month/year directly in IndexedDB (test-only)
+      inserted.push(await db.addCost({ sum: 50, currency: "USD", category: "FOOD", description: "move1" }));
+      inserted.push(await db.addCost({ sum: 80, currency: "USD", category: "FOOD", description: "move2" }));
+
+      // --- test-only: update two records to other month/year using direct IndexedDB
+      // This DOES NOT change your library; it just manipulates records to test filtering.
+      async function patchItemDate(itemId, year, month) {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(dbName, 1);
+          req.onsuccess = () => {
+            const rawDb = req.result;
+            const tx = rawDb.transaction("costs", "readwrite");
+            const store = tx.objectStore("costs");
+            const getReq = store.get(itemId);
+            getReq.onsuccess = () => {
+              const obj = getReq.result;
+              obj.Date.year = year;
+              obj.Date.month = month;
+              const putReq = store.put(obj);
+              putReq.onsuccess = () => resolve();
+              putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+          };
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      // Move one item to previous month, one item to previous year January
+      const prevMonth = M === 1 ? 12 : (M - 1);
+      const prevMonthYear = M === 1 ? (Y - 1) : Y;
+
+      await patchItemDate(inserted[8].id, prevMonthYear, prevMonth); // move1
+      await patchItemDate(inserted[9].id, Y - 1, 1);                 // move2 -> Jan last year
+
+      // Also patch our local copies to match DB for expectation calculations
+      inserted[8].Date.year = prevMonthYear;
+      inserted[8].Date.month = prevMonth;
+
+      inserted[9].Date.year = Y - 1;
+      inserted[9].Date.month = 1;
+
+      console.log("Inserted items:", inserted);
+
+      // ---------- RUN REPORT TESTS ----------
+      // A) Current month/year in USD
+      const actualA = await db.getReport(Y, M, "USD");
+      const expectedA = computeExpectedReport(inserted, Y, M, "USD", RATES);
+      compareReport(actualA, expectedA, `Report A: ${Y}-${M} in USD`);
+
+      // B) Current month/year in ILS
+      const actualB = await db.getReport(Y, M, "ILS");
+      const expectedB = computeExpectedReport(inserted, Y, M, "ILS", RATES);
+      compareReport(actualB, expectedB, `Report B: ${Y}-${M} in ILS`);
+
+      // C) Current month/year in EURO
+      const actualC = await db.getReport(Y, M, "EURO");
+      const expectedC = computeExpectedReport(inserted, Y, M, "EURO", RATES);
+      compareReport(actualC, expectedC, `Report C: ${Y}-${M} in EURO`);
+
+      // D) Previous month/year in GBP (should include only the moved item)
+      const actualD = await db.getReport(prevMonthYear, prevMonth, "GBP");
+      const expectedD = computeExpectedReport(inserted, prevMonthYear, prevMonth, "GBP", RATES);
+      compareReport(actualD, expectedD, `Report D: ${prevMonthYear}-${prevMonth} in GBP`);
+
+      // E) January last year in USD (should include only move2)
+      const actualE = await db.getReport(Y - 1, 1, "USD");
+      const expectedE = computeExpectedReport(inserted, Y - 1, 1, "USD", RATES);
+      compareReport(actualE, expectedE, `Report E: ${Y - 1}-1 in USD`);
+
+      // ---------- INVALID INPUT TESTS ----------
+      console.group("Invalid input tests (should reject)");
+
+      // month out of range
+      try {
+        await db.getReport(Y, 13, "USD");
+        console.error("FAIL: expected rejection for month=13");
+      } catch (e) {
+        console.log("PASS: rejected month=13:", e.message);
+      }
+
+      // invalid db name
+      try {
+        await idb.openCostsDB("", 1);
+        console.error("FAIL: expected rejection for empty db name");
+      } catch (e) {
+        console.log("PASS: rejected empty db name:", e.message);
+      }
+
+      // invalid cost object
+      try {
+        await db.addCost({ currency: "USD" });
+        console.error("FAIL: expected rejection for invalid cost object");
+      } catch (e) {
+        console.log("PASS: rejected invalid cost:", e.message);
+      }
+
+      console.groupEnd();
+
+      console.log("%cALL TESTS COMPLETED ✅", "color: green; font-weight: bold; font-size: 14px;");
+    }
+
+    run().catch((e) => {
+      console.error("Boundary test runner failed:", e);
+    });
+  </script>
+</body>
+</html>

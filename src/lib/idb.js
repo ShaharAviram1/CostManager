@@ -1,7 +1,7 @@
 // IndexedDB wrapper for the Cost Manager app (React/module version).
 'use strict';
 
-// Rates map (base USD): 1 USD = X <currency>. Updated via setRates().
+// Rates map (base USD): 1 USD = X <currency>. Defaults used until fetched/overridden.
 const exchangeRates = { USD: 1, ILS: 3.5, GBP: 0.8, EURO: 0.9 };
 
 // Replace in-memory exchange rates (invalid input is ignored).
@@ -34,13 +34,29 @@ export function openCostsDB(databaseName, databaseVersion) {
       function addCost(cost) {
         return new Promise((resolveAdd, rejectAdd) => {
           try {
+            // Input validation for cost object.
+            if (!cost || typeof cost !== 'object') {
+              rejectAdd(new Error('Invalid cost object: missing required fields'));
+              return;
+            }
+            const { sum, currency, category, description } = cost;
+            if (sum == null || currency == null || category == null || description == null) {
+              rejectAdd(new Error('Invalid cost object: missing required fields'));
+              return;
+            }
+            const numericSum = Number(sum);
+            if (!Number.isFinite(numericSum) || numericSum < 0) {
+              rejectAdd(new Error('Invalid sum'));
+              return;
+            }
+
             // Capture insertion time once so timestamp + Date stay consistent.
             const now = new Date();
             const itemToStore = {
-              sum: Number(cost.sum),
-              currency: String(cost.currency),
-              category: String(cost.category),
-              description: String(cost.description),
+              sum: numericSum,
+              currency: String(currency),
+              category: String(category),
+              description: String(description),
               timestamp: now.getTime(),
               Date: {
                 day: now.getDate(),
@@ -86,30 +102,47 @@ export function openCostsDB(databaseName, databaseVersion) {
       // Build a month report; keep original currency and add sumInCurrency for totals.
       function getReport(year, month, currency) {
         return new Promise((resolveRep, rejectRep) => {
+          // Input validation for report parameters.
+          const y = Number(year);
+          const m = Number(month);
+          if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+            rejectRep(new Error('Invalid year or month'));
+            return;
+          }
+          if (typeof currency !== 'string' || !exchangeRates[currency]) {
+            rejectRep(new Error('Invalid currency'));
+            return;
+          }
+
           const tx = db.transaction('costs', 'readonly');
           const store = tx.objectStore('costs');
           const req = store.getAll();
 
           req.onsuccess = () => {
             const allCosts = req.result;
-            // Month is stored 1-based (Jan=1).
+            // Filtering by insertion month/year stored in Date.
             const filtered = allCosts.filter(
-              (item) => item.Date.month === month && item.Date.year === year
+              (item) => item.Date.month === m && item.Date.year === y
             );
 
-            const costsForReport = filtered.map((item) => {
-              const converted = convert(Number(item.sum), item.currency, currency);
-              return { ...item, sumInCurrency: converted };
-            });
+            // We intentionally match the strict spec and strip internal fields.
+            const costsForReport = filtered.map((item) => ({
+              sum: Number(item.sum),
+              currency: String(item.currency),
+              category: String(item.category),
+              description: String(item.description),
+              Date: { day: Number(item.Date.day) },
+            }));
 
+            // Compute total in requested currency using original sums and currencies.
             let total = 0;
-            for (const item of costsForReport) {
-              total += item.sumInCurrency;
+            for (const item of filtered) {
+              total += convert(Number(item.sum), item.currency, currency);
             }
 
             resolveRep({
-              year: year,
-              month: month,
+              year: y,
+              month: m,
               costs: costsForReport,
               total: { currency: currency, total: total },
             });
@@ -130,7 +163,7 @@ export function openCostsDB(databaseName, databaseVersion) {
       }
 
       // Public API for callers.
-      resolve({ addCost, getReport, setRates});
+      resolve({ addCost, getReport, setRates });
     };
 
     request.onerror = () => {

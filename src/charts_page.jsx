@@ -19,6 +19,7 @@ import ContentCard from './components/content_card';
 
 export default function ChartsPage({ db }) {
 
+    // State tracked: selected chart, year, month, messages, data, currency, loading, and generation flag.
     const [chart, setChart] = useState('');
     const [year, setYear] = useState('');
     const [month, setMonth] = useState('');
@@ -67,6 +68,9 @@ export default function ChartsPage({ db }) {
                 setPieData([]);
                 setHasGenerated(true);
             }
+            catch (err) {
+                setMessage('Generating report failed: ' + err.message);
+            }
             finally {
                 setIsLoading(false);
             }
@@ -85,10 +89,15 @@ export default function ChartsPage({ db }) {
 
     return (
         <ContentCard>
+            {/* Main card container for page content */}
+            {/* Vertical stack for layout spacing */}
             <Stack spacing={2}>
+                {/* Page header */}
                 <Typography variant='h5'>Charts</Typography>
 
+                {/* Inputs row: chart type, year, month, currency */}
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    {/* Chart type selector */}
                     <FormControl fullWidth variant='outlined' sx={{ flex: '1 1 0', minWidth: 0 }}>
                         <InputLabel id='chart-type-label'>Chart type</InputLabel>
                         <Select
@@ -102,6 +111,7 @@ export default function ChartsPage({ db }) {
                         </Select>
                     </FormControl>
 
+                    {/* Year input field */}
                     <TextField
                         label='Year'
                         type='text'
@@ -111,6 +121,7 @@ export default function ChartsPage({ db }) {
                         fullWidth
                         sx={{ flex: '1 1 0', minWidth: 0 }}/>
 
+                    {/* Month input field, enabled only for pie chart */}
                     <TextField
                         label='Month'
                         type='text'
@@ -124,6 +135,7 @@ export default function ChartsPage({ db }) {
                         fullWidth
                         sx={{ flex: '1 1 0', minWidth: 0 }}/>
 
+                    {/* Currency selector */}
                     <FormControl fullWidth variant='outlined' sx={{ flex: '1 1 0', minWidth: 0 }}>
                         <InputLabel id='currency-label'>Currency</InputLabel>
                         <Select
@@ -139,15 +151,19 @@ export default function ChartsPage({ db }) {
                     </FormControl>
                 </Stack>
 
+                {/* Generate chart button */}
                 <Button variant='contained' onClick={generateChart} disabled={!canGenerate || isLoading}>
                     {isLoading? 'Loading' : 'Generate chart'}
                 </Button>
 
+                {/* Warning or info message display */}
                 {message && <Alert severity='warning'>{message}</Alert>}
 
-                {/* Reserve space so the layout doesn’t jump when charts appear/disappear */}
-                {(hasGenerated || isLoading) && (
-                    <Box sx={{ minHeight: 360, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {/* Chart display area */}
+            {(hasGenerated || isLoading) && (
+                <Box sx={{ minHeight: 360, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    {/* Container box for centering charts or messages */}
+                        {/* Pie chart rendering */}
                         {hasPieMeaningfulData && (
                             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                                 <PieChart width={420} height={320}>
@@ -169,6 +185,7 @@ export default function ChartsPage({ db }) {
                             </Box>
                         )}
 
+                        {/* Bar chart rendering */}
                         {hasBarMeaningfulData && (
                             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                                 <BarChart width={520} height={320} data={barData}>
@@ -181,11 +198,13 @@ export default function ChartsPage({ db }) {
                             </Box>
                         )}
 
+                        {/* Loading indicator text */}
                         {isLoading && (
                             <Typography variant='body2' color='text.secondary'>
                                 Loading…
                             </Typography>
                         )}
+                        {/* No data message */}
                         {!isLoading && hasGenerated && !hasPieMeaningfulData && !hasBarMeaningfulData && (
                             <Typography variant='body2' color='text.secondary'>
                                 No data found for the selected period.

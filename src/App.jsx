@@ -9,10 +9,11 @@ import SettingsPage from './settings_page.jsx';
 import BrandIcon from './components/brand_icon.jsx';
 
 function App() {
+  // App-level state: current tab index, database API instance, and rates loading status
   const [tab, setTab] = useState(0);
   const [db, setDb] = useState(null);
   const [ratesReady, setRatesReady] = useState(false);
-  // One-time init: open IndexedDB and load exchange rates (with a safe fallback).
+  // One-time init: open IndexedDB, load and validate exchange rates (with a safe fallback)
   useEffect(() => {
     async function init() {
       // Open the DB and expose our small API (addCost/getReport/setRates).
@@ -60,6 +61,7 @@ function App() {
           }
         }
 
+        // Store validated rates in IndexedDB for app-wide use
         if (rates) {
           await dbApi.setRates(rates);
           setRatesReady(true);
@@ -80,6 +82,7 @@ function App() {
   }, []);
   return (
     <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', pb: 6 }}>
+      {/* Top navigation/header */}
       <AppBar position="sticky" color="inherit" elevation={1}>
         <Toolbar sx={{ gap: 2 }}>
           <Box>
@@ -106,6 +109,7 @@ function App() {
 
           <Box sx={{ flexGrow: 1 }} />
 
+          {/* Controls page navigation */}
           <Tabs
             value={tab}
             onChange={(e, newValue) => setTab(newValue)}
@@ -120,13 +124,18 @@ function App() {
           </Tabs>
         </Toolbar>
       </AppBar>
+      {/* Main page content area */}
       <Container maxWidth="md" sx={{ mt: 3 }}>
         {/* Render pages only after DB is ready and rates were attempted to load. */}
         {db && ratesReady && (
           <Box sx={{ mt: 2 }}>
+            {/* Page to add new cost entries */}
             {tab === 0 && <AddCostPage db={db} />}
+            {/* Page to view expense reports */}
             {tab === 1 && <ReportPage db={db} />}
+            {/* Page to display charts and visualizations */}
             {tab === 2 && <ChartsPage db={db} />}
+            {/* Page for app settings and preferences */}
             {tab === 3 && <SettingsPage db={db} />}
           </Box>
         )}

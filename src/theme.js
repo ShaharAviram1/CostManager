@@ -1,5 +1,4 @@
-// This file defines the global Material-UI (MUI) theme for the app, customizing colors, typography, shapes, and component defaults.
-
+// Utility to create a centralized MUI theme object
 import { createTheme } from '@mui/material/styles';
 
 // Defines the app’s color system
@@ -7,9 +6,11 @@ export const theme = createTheme({
     palette: {
         mode: 'light',
         primary: {
+            // Primary brand color used across buttons and highlights
             main: '#1f4ed8',
         },
         background: {
+            // App’s global page background color
             default: '#f6f7fb',
             paper: '#ffffff',
         },
@@ -36,6 +37,7 @@ export const theme = createTheme({
             'Segoe UI Emoji',
         ].join(','),
         h5: {
+            // Style used for page titles and section headers
             fontWeight: 700,
             letterSpacing: '-0.01em',
         },
@@ -77,6 +79,7 @@ export const theme = createTheme({
         // Default variant for TextField components
         MuiTextField: {
             defaultProps: {
+                // Enforces a consistent input style across the app
                 variant: 'outlined',
             },
         },

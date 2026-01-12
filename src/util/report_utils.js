@@ -1,18 +1,22 @@
-// Helper utilities for transforming report data for charts and views.
+// Helper utilities for transforming report data for charts and views in the Cost Manager application.
+// These functions are primarily used to prepare and aggregate financial data for visual components such as pie charts and bar charts.
 'use strict';
 
 // Aggregates costs by category and normalizes sums using `sumInCurrency` when available.
+// This function is used to prepare data for pie charts by aggregating total costs per category.
 export function getCategoryTotals(costs) {
     const totals = {};
     for (const c of costs) {
         // Use sumInCurrency if available, otherwise fallback to sum
         const amount = Number(c.sumInCurrency ?? c.sum);
+        // Initialize to 0 if this category hasn't been seen yet, then add the current amount
         totals[c.category] = (totals[c.category] || 0) + amount;
     }
     return Object.entries(totals).map(([name, value]) => ({ name: name, value: value }));
 }
 
 // Builds 12-month totals for the bar chart by querying monthly reports.
+// Prepares the monthly total cost data for a given year and currency to be used in the yearly bar chart visualization.
 export async function getYearMonthlyTotals(db, year, currency) {
     const result = [];
     for (let month = 1; month <= 12; month++){
