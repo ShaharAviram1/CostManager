@@ -132,6 +132,7 @@ export function openCostsDB(databaseName, databaseVersion) {
               category: String(item.category),
               description: String(item.description),
               Date: { day: Number(item.Date.day) },
+              sumInCurrency: convert(Number(item.sum), item.currency, currency),
             }));
 
             // Compute total in requested currency using original sums and currencies.
